@@ -1,0 +1,46 @@
+name: Update cron schedule on VPS
+
+# শুধু ম্যানুয়ালি চালানো হয় — Actions ট্যাব থেকে "Run workflow" চাপুন।
+# কোড push করলে এটি চলবে না, তাই cron শিডিউল ভুলবশত বদলে যাবে না।
+on:
+  workflow_dispatch:
+    inputs:
+      minute:
+        description: "Cron minute field (e.g. 14,29,44,59 or */15)"
+        required: true
+        default: "13,28,43,58"
+      hour:
+        description: "Cron hour field"
+        required: true
+        default: "*"
+      day:
+        description: "Cron day-of-month field"
+        required: true
+        default: "*"
+      month:
+        description: "Cron month field"
+        required: true
+        default: "*"
+      weekday:
+        description: "Cron weekday field"
+        required: true
+        default: "*"
+
+jobs:
+  update-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rewrite scanner cron line
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            SCHEDULE="${{ github.event.inputs.minute }} ${{ github.event.inputs.hour }} ${{ github.event.inputs.day }} ${{ github.event.inputs.month }} ${{ github.event.inputs.weekday }}"
+            CRON_LINE="$SCHEDULE cd /root/scanner && ./venv/bin/python scanner.py >> /root/scanner/scanner.log 2>&1"
+            # পুরনো scanner.py লাইন সরিয়ে নতুন শিডিউল বসানো হয় (ডুপ্লিকেট হবে না)
+            ( crontab -l 2>/dev/null | grep -v -F "scanner.py" ; echo "$CRON_LINE" ) | crontab -
+            echo "Cron updated. Current crontab:"
+            crontab -l
